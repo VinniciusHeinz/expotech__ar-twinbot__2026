@@ -11,10 +11,10 @@ startBtn.addEventListener('click', async () => {
     const THREE = window.THREE;
     const MindARThree = window.MINDAR.IMAGE.MindARThree;
 
-    // 1. Inicializa o WebAR
+    // 1. Inicializa o WebAR com o marcador personalizado
     const mindarThree = new MindARThree({
       container: document.querySelector("#ar-container"),
-      imageTargetSrc: "https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.1.5/examples/image-tracking/assets/card-example/card.mind",
+      imageTargetSrc: "/targets.mind",
     });
 
     const { renderer, scene, camera } = mindarThree;
