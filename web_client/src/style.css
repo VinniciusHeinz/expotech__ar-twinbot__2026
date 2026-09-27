@@ -52,7 +52,86 @@
 
 body {
   margin: 0;
+  overflow: hidden;
 }
+
+/* ========================================================
+   PAINEL DE TELEMETRIA SEMITRANSPARENTE (HUD)
+   ======================================================== */
+
+#ar-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 1;
+}
+
+#start-btn {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  padding: 14px 28px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #0f172a;
+  background: #00ffcc;
+  border: none;
+  border-radius: 30px;
+  box-shadow: 0 4px 20px rgba(0, 255, 204, 0.4);
+  cursor: pointer;
+  letter-spacing: 0.5px;
+  transition: transform 0.2s, background 0.2s;
+}
+
+#start-btn:active {
+  transform: translateX(-50%) scale(0.96);
+}
+
+#telemetry-panel {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  z-index: 9999;
+  
+  /* Fundo cinza escuro translúcido com desfoque (glassmorphism) */
+  background: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  
+  border: 1px solid rgba(0, 255, 204, 0.35);
+  border-radius: 12px;
+  padding: 14px 18px;
+  color: #f1f5f9;
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.6;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+  max-width: 280px;
+  pointer-events: none;
+}
+
+#telemetry-panel h3 {
+  margin: 0 0 8px 0;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  color: #00ffcc;
+  text-transform: uppercase;
+  border-bottom: 1px solid rgba(0, 255, 204, 0.25);
+  padding-bottom: 4px;
+}
+
+#status {
+  word-break: break-word;
+}
+
+/* ========================================================
+   ESTILOS GERAIS
+   ======================================================== */
 
 h1,
 h2 {

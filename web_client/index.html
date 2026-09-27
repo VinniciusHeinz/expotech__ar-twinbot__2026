@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
     <title>AR-TwinBot - Digital Twin</title>
 
+    <link rel="stylesheet" href="/src/style.css" />
+
     <script src="https://cdn.jsdelivr.net/npm/three@0.136.0/build/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.1.5/dist/mindar-image-three.prod.js"></script>
 
@@ -18,21 +20,51 @@
         background-color: transparent !important;
         font-family: monospace;
       }
-      #overlay {
-        position: absolute;
-        top: 12px;
-        left: 12px;
-        color: #00ffcc;
-        z-index: 10;
+
+      /* Painel HUD Semitransparente com Desfoque */
+      #telemetry-panel {
+        position: fixed;
+        top: 16px;
+        left: 16px;
+        z-index: 1000;
+        background: rgba(15, 23, 42, 0.75);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        border: 1px solid rgba(0, 255, 204, 0.35);
+        border-radius: 12px;
+        padding: 14px 18px;
+        color: #f1f5f9;
+        font-size: 13px;
+        line-height: 1.6;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+        max-width: 280px;
         pointer-events: none;
       }
+
+      #telemetry-panel h3 {
+        margin: 0 0 8px 0;
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 1.5px;
+        color: #00ffcc;
+        text-transform: uppercase;
+        border-bottom: 1px solid rgba(0, 255, 204, 0.25);
+        padding-bottom: 4px;
+      }
+
+      #status {
+        margin: 0;
+        word-break: break-word;
+      }
+
       #ar-container {
         width: 100vw;
         height: 100vh;
         position: relative;
         overflow: hidden;
       }
-      /* Força a tag de vídeo criada pelo MindAR a ocupar toda a tela e ficar no fundo */
+
+      /* Força a tag de vídeo criada pelo MindAR a ocupar todo o ecrã e ficar no fundo */
       #ar-container video {
         position: absolute !important;
         top: 0 !important;
@@ -42,6 +74,7 @@
         object-fit: cover !important;
         z-index: 1 !important;
       }
+
       /* Força a camada 3D do Three.js a ficar transparente e sobre o vídeo */
       #ar-container canvas {
         position: absolute !important;
@@ -51,6 +84,7 @@
         height: 100% !important;
         z-index: 2 !important;
       }
+
       #start-btn {
         position: absolute;
         top: 50%;
@@ -66,13 +100,18 @@
         cursor: pointer;
         z-index: 20;
         box-shadow: 0 0 20px rgba(0, 255, 204, 0.5);
+        transition: transform 0.2s, background-color 0.2s;
+      }
+
+      #start-btn:active {
+        transform: translate(-50%, -50%) scale(0.96);
       }
     </style>
   </head>
   <body>
-    <div id="overlay">
+    <div id="telemetry-panel">
       <h3>AR-TwinBot Telemetry</h3>
-      <p id="status">Clique no botão para abrir a câmera</p>
+      <div id="status">Clique no botão para abrir a câmara</div>
     </div>
 
     <button id="start-btn">INICIAR CÂMARA AR</button>
