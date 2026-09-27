@@ -1,7 +1,8 @@
-import { TelemetryMock } from './telemetry_mock.js';
-
 const startBtn = document.getElementById('start-btn');
 const statusEl = document.getElementById('status');
+
+// Endereço WebSocket do ESP32 na rede local
+const WS_URL = "ws://192.168.15.28:81";
 
 startBtn.addEventListener('click', async () => {
   startBtn.innerText = "Solicitando câmera...";
@@ -93,7 +94,7 @@ startBtn.addEventListener('click', async () => {
 
       if (statusEl) {
         statusEl.innerHTML = `
-          <b>ESTADO:</b> <span style="color: #${dynamicColor.toString(16)}">${data.state}</span><br>
+          <b>ESTADO:</b> <span style="color: #${dynamicColor.toString(16).padStart(6, '0')}">${data.state}</span><br>
           <b>DISTÂNCIA:</b> ${data.distance_cm} cm<br>
           <b>MOTORES:</b> L: ${data.left_motor_pwm} | R: ${data.right_motor_pwm}<br>
           <b>ALERTA:</b> ${data.alert ? 'ATIVADO' : 'NORMAL'}
@@ -101,19 +102,40 @@ startBtn.addEventListener('click', async () => {
       }
     }
 
-    const mock = new TelemetryMock(updateDigitalTwin);
-    mock.start();
+    // 7. Conexão WebSocket Real com o ESP32
+    const socket = new WebSocket(WS_URL);
 
-    // 7. Eventos de Deteção
+    socket.onopen = () => {
+      console.log("Conectado ao ESP32 via WebSocket!");
+    };
+
+    socket.onmessage = (event) => {
+      try {
+        const telemetry = JSON.parse(event.data);
+        updateDigitalTwin(telemetry);
+      } catch (e) {
+        console.error("Erro ao processar telemetria recebida:", e);
+      }
+    };
+
+    socket.onerror = (err) => {
+      console.error("Erro no WebSocket:", err);
+    };
+
+    socket.onclose = () => {
+      console.warn("Conexão WebSocket com o ESP32 encerrada.");
+    };
+
+    // 8. Eventos de Deteção AR
     anchor.onTargetFound = () => {
-      if (statusEl) statusEl.innerHTML = `<b>Target Encontrado!</b>`;
+      console.log("Alvo AR encontrado!");
     };
 
     anchor.onTargetLost = () => {
-      if (statusEl) statusEl.innerHTML = `<b>Procurando Target...</b>`;
+      console.log("Alvo AR perdido!");
     };
 
-    // 8. Inicia Câmera
+    // 9. Inicia Câmera
     await mindarThree.start();
     startBtn.style.display = 'none';
     if (statusEl) statusEl.innerText = "Aponte a câmera para o cartão alvo...";

@@ -6,8 +6,8 @@
 // ---------------------------------------------------------
 // Configurações de Rede (Substitua depois pelos seus dados)
 // ---------------------------------------------------------
-const char* ssid = "SEU_WIFI_SSID";
-const char* password = "SUA_SENHA_WIFI";
+const char* ssid = "Vinnicius :D";
+const char* password = "Vinnicius.ph02004";
 
 WebSocketsServer webSocket = WebSocketsServer(81);
 
