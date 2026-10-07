@@ -1,8 +1,8 @@
 const startBtn = document.getElementById('start-btn');
 const statusEl = document.getElementById('status');
 
-// Endereço WebSocket do ESP32 na rede local
-const WS_URL = "ws://192.168.15.28:81";
+// Endereço WebSocket seguro passando pelo Proxy do Vite
+const WS_URL = `wss://${window.location.host}/api/ws`;
 
 startBtn.addEventListener('click', async () => {
   startBtn.innerText = "Solicitando câmara...";
@@ -146,11 +146,18 @@ startBtn.addEventListener('click', async () => {
       }
     }
 
-    // 7. Conexão WebSocket Real
+    // 7. Conexão WebSocket Real via Proxy Seguro
+    if (statusEl) {
+      statusEl.innerHTML = "Conectando ao ESP32 via Telemetria...";
+    }
+
     const socket = new WebSocket(WS_URL);
 
     socket.onopen = () => {
       console.log("Conectado ao ESP32 via WebSocket!");
+      if (statusEl) {
+        statusEl.innerHTML = "ESP32 Conectado. Aguardando dados...";
+      }
     };
 
     socket.onmessage = (event) => {
@@ -164,6 +171,9 @@ startBtn.addEventListener('click', async () => {
 
     socket.onerror = (err) => {
       console.error("Erro no WebSocket:", err);
+      if (statusEl) {
+        statusEl.innerHTML = "<span style='color: #ff2244;'>Erro na conexão WebSocket</span>";
+      }
     };
 
     socket.onclose = () => {
