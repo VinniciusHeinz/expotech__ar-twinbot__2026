@@ -10,7 +10,8 @@ export default defineConfig({
       '/api/ws': {
         target: 'ws://192.168.15.28:81',
         ws: true,
-        changeOrigin: true
+        changeOrigin: true,
+        rewriteWsOrigin: true
       }
     }
   }

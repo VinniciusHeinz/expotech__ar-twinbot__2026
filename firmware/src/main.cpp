@@ -21,13 +21,13 @@ WebSocketsServer webSocket = WebSocketsServer(81);
 // Definição de Pinos - Ponte H (L298N)
 // ---------------------------------------------------------
 // Motor Esquerdo
-#define ENA 19 // PWM
-#define IN1 21
-#define IN2 22
+#define ENA 25 // Laranja
+#define IN1 26 // Roxo
+#define IN2 27 // Azul
 // Motor Direito
-#define ENB 23 // PWM
-#define IN3 25
-#define IN4 26
+#define ENB 13 // Verde
+#define IN3 14 // Marrom
+#define IN4 12 // Cinza
 
 // Configurações do PWM (API do ESP32)
 const int freq = 5000;

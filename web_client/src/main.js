@@ -1,8 +1,9 @@
 const startBtn = document.getElementById('start-btn');
 const statusEl = document.getElementById('status');
 
-// Endereço WebSocket seguro passando pelo Proxy do Vite
-const WS_URL = `wss://${window.location.host}/api/ws`;
+// Conexão dinâmica e segura via Proxy do Vite (compatível com iOS, Android e PC)
+const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+const WS_URL = `${protocol}//${window.location.host}/api/ws`;
 
 startBtn.addEventListener('click', async () => {
   startBtn.innerText = "Solicitando câmara...";
