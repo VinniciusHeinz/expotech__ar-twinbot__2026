@@ -7,7 +7,9 @@
 
     <link rel="stylesheet" href="/src/style.css" />
 
+    <!-- Three.js, OrbitControls e MindAR -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.136.0/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.136.0/examples/js/controls/OrbitControls.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.1.5/dist/mindar-image-three.prod.js"></script>
 
     <style>
@@ -17,7 +19,7 @@
         width: 100%;
         height: 100%;
         overflow: hidden;
-        background-color: transparent !important;
+        background-color: #0b0f19 !important;
         font-family: monospace;
       }
 
@@ -27,7 +29,7 @@
         top: 16px;
         left: 16px;
         z-index: 1000;
-        background: rgba(15, 23, 42, 0.75);
+        background: rgba(15, 23, 42, 0.78);
         backdrop-filter: blur(10px);
         -webkit-backdrop-filter: blur(10px);
         border: 1px solid rgba(0, 255, 204, 0.35);
@@ -37,7 +39,7 @@
         font-size: 13px;
         line-height: 1.6;
         box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
-        max-width: 280px;
+        max-width: 260px;
         pointer-events: none;
       }
 
@@ -57,11 +59,72 @@
         word-break: break-word;
       }
 
-      #ar-container {
+      /* Barra superior para alternar entre modos a qualquer momento */
+      #mode-switcher {
+        position: fixed;
+        top: 16px;
+        right: 16px;
+        z-index: 1000;
+        display: none;
+        gap: 8px;
+        background: rgba(15, 23, 42, 0.78);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        padding: 6px;
+        border-radius: 10px;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+      }
+
+      .switch-btn {
+        background: transparent;
+        color: #94a3b8;
+        border: none;
+        padding: 8px 12px;
+        border-radius: 6px;
+        font-family: monospace;
+        font-size: 12px;
+        font-weight: bold;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+
+      .switch-btn.active {
+        background: #00ffcc;
+        color: #0f172a;
+        box-shadow: 0 0 12px rgba(0, 255, 204, 0.4);
+      }
+
+      /* Containers de visualização */
+      #ar-container, #orbit-container {
         width: 100vw;
         height: 100vh;
-        position: relative;
+        position: absolute;
+        top: 0;
+        left: 0;
         overflow: hidden;
+      }
+
+      #orbit-container {
+        display: none;
+        z-index: 5;
+        background: radial-gradient(circle at center, #1e293b 0%, #090d16 100%);
+      }
+
+      /* Dica de interação no modo 3D */
+      #orbit-hint {
+        position: fixed;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 1000;
+        color: rgba(241, 245, 249, 0.6);
+        background: rgba(15, 23, 42, 0.6);
+        padding: 6px 14px;
+        border-radius: 20px;
+        font-size: 12px;
+        pointer-events: none;
+        display: none;
+        white-space: nowrap;
       }
 
       /* Força a tag de vídeo criada pelo MindAR a ocupar todo o ecrã e ficar no fundo */
@@ -85,37 +148,78 @@
         z-index: 2 !important;
       }
 
-      #start-btn {
-        position: absolute;
-        top: 50%;
+      /* Menu inicial de escolha de modo */
+      #start-menu {
+        position: fixed;
+        bottom: 32px;
         left: 50%;
-        transform: translate(-50%, -50%);
-        padding: 16px 28px;
-        background-color: #00ffcc;
-        color: #000;
-        font-weight: bold;
-        font-size: 16px;
-        border: none;
-        border-radius: 8px;
-        cursor: pointer;
-        z-index: 20;
-        box-shadow: 0 0 20px rgba(0, 255, 204, 0.5);
-        transition: transform 0.2s, background-color 0.2s;
+        transform: translateX(-50%);
+        z-index: 9999;
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        justify-content: center;
+        width: 90%;
+        max-width: 460px;
       }
 
-      #start-btn:active {
-        transform: translate(-50%, -50%) scale(0.96);
+      .action-btn {
+        flex: 1;
+        min-width: 180px;
+        padding: 15px 20px;
+        font-family: monospace;
+        font-weight: bold;
+        font-size: 14px;
+        border: none;
+        border-radius: 30px;
+        cursor: pointer;
+        transition: transform 0.2s, box-shadow 0.2s;
+        text-align: center;
+      }
+
+      #start-ar-btn {
+        background-color: #00ffcc;
+        color: #0f172a;
+        box-shadow: 0 4px 20px rgba(0, 255, 204, 0.4);
+      }
+
+      #start-orbit-btn {
+        background-color: rgba(30, 41, 59, 0.9);
+        color: #00ffcc;
+        border: 1px solid #00ffcc;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+      }
+
+      .action-btn:active {
+        transform: scale(0.96);
       }
     </style>
   </head>
   <body>
+    <!-- Painel de Telemetria -->
     <div id="telemetry-panel">
       <h3>AR-TwinBot Telemetry</h3>
-      <div id="status">Clique no botão para abrir a câmara</div>
+      <div id="status">Conectando ao ESP32...</div>
     </div>
 
-    <button id="start-btn">INICIAR CÂMARA AR</button>
+    <!-- Alternador de Modo (aparece após iniciar) -->
+    <div id="mode-switcher">
+      <button id="btn-mode-ar" class="switch-btn">📷 AR</button>
+      <button id="btn-mode-orbit" class="switch-btn">🪐 3D LIVRE</button>
+    </div>
+
+    <!-- Botões Iniciais -->
+    <div id="start-menu">
+      <button id="start-ar-btn" class="action-btn">📷 CÂMERA AR</button>
+      <button id="start-orbit-btn" class="action-btn">🪐 INSPEÇÃO 3D</button>
+    </div>
+
+    <!-- Dica de Rotação no Modo 3D -->
+    <div id="orbit-hint">Arraste para girar 360° • Pinça/Scroll para Zoom</div>
+
+    <!-- Containers -->
     <div id="ar-container"></div>
+    <div id="orbit-container"></div>
 
     <script type="module" src="/src/main.js"></script>
   </body>
