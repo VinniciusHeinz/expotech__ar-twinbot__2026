@@ -4,7 +4,7 @@
 #include <ArduinoJson.h>
 
 // ---------------------------------------------------------
-// Configurações de Rede (Substitua depois pelos seus dados)
+// Configurações de Rede
 // ---------------------------------------------------------
 const char* ssid = "Vinnicius :D";
 const char* password = "Vinnicius.ph02004";
@@ -46,6 +46,12 @@ int leftPwmVal = 0;
 int rightPwmVal = 0;
 bool isAlert = false;
 unsigned long lastTelemetryTime = 0;
+
+// Variáveis do Modo Manual (Admin)
+bool isManualMode = false;
+int manualLeftPwm = 0;
+int manualRightPwm = 0;
+BotState manualState = BRAKE;
 
 // ---------------------------------------------------------
 // Funções de Controlo dos Motores
@@ -92,6 +98,57 @@ float readDistance() {
 }
 
 // ---------------------------------------------------------
+// Receção de Comandos WebSocket (Modo Admin)
+// ---------------------------------------------------------
+void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length) {
+  if (type == WStype_TEXT) {
+    StaticJsonDocument<200> cmdDoc;
+    DeserializationError error = deserializeJson(cmdDoc, payload, length);
+    
+    if (!error) {
+      const char* cmd = cmdDoc["cmd"];
+      
+      if (cmd && strcmp(cmd, "mode") == 0) {
+        isManualMode = cmdDoc["manual"];
+        if (isManualMode) {
+          // Ao entrar no modo manual, trava o robô e aguarda comandos
+          manualLeftPwm = 0;
+          manualRightPwm = 0;
+          manualState = BRAKE;
+          setMotors(0, 0);
+        }
+      } 
+      else if (cmd && strcmp(cmd, "move") == 0 && isManualMode) {
+        const char* dir = cmdDoc["dir"];
+        if (!dir) return;
+
+        if (strcmp(dir, "FORWARD") == 0) {
+          manualLeftPwm = 200;
+          manualRightPwm = 200;
+          manualState = FORWARD;
+        } else if (strcmp(dir, "REVERSE") == 0) {
+          manualLeftPwm = -180;
+          manualRightPwm = -180;
+          manualState = REVERSE;
+        } else if (strcmp(dir, "LEFT") == 0) {
+          manualLeftPwm = -160;
+          manualRightPwm = 160;
+          manualState = ROTATE;
+        } else if (strcmp(dir, "RIGHT") == 0) {
+          manualLeftPwm = 160;
+          manualRightPwm = -160;
+          manualState = ROTATE;
+        } else { // STOP
+          manualLeftPwm = 0;
+          manualRightPwm = 0;
+          manualState = BRAKE;
+        }
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------
 // Setup
 // ---------------------------------------------------------
 void setup() {
@@ -122,8 +179,9 @@ void setup() {
   Serial.print("IP do ESP32: ");
   Serial.println(WiFi.localIP());
   
-  // Inicia WebSocket
+  // Inicia WebSocket e regista o callback de comandos
   webSocket.begin();
+  webSocket.onEvent(onWebSocketEvent);
   Serial.println("Servidor WebSocket iniciado na porta 81");
 }
 
@@ -141,32 +199,38 @@ void loop() {
     
     currentDistance = readDistance();
     
-    // Máquina de Estados (Navegação Reativa)
-    if (currentDistance <= 15.0) {
-      currentState = REVERSE;
-      leftPwmVal = -150;
-      rightPwmVal = -150;
-      isAlert = true;
-    } else if (currentDistance < 30.0) {
-      currentState = ROTATE;
-      leftPwmVal = -120;
-      rightPwmVal = 120;
-      isAlert = true;
+    if (isManualMode) {
+      // Modo Manual (Controlado pelo Admin na Web)
+      currentState = manualState;
+      leftPwmVal = manualLeftPwm;
+      rightPwmVal = manualRightPwm;
+      isAlert = (currentDistance < 30.0);
     } else {
-      currentState = FORWARD;
-      leftPwmVal = 200;
-      rightPwmVal = 200;
-      isAlert = false;
+      // Modo Autónomo (Navegação Reativa Original)
+      if (currentDistance <= 15.0) {
+        currentState = REVERSE;
+        leftPwmVal = -150;
+        rightPwmVal = -150;
+        isAlert = true;
+      } else if (currentDistance < 30.0) {
+        currentState = ROTATE;
+        leftPwmVal = -120;
+        rightPwmVal = 120;
+        isAlert = true;
+      } else {
+        currentState = FORWARD;
+        leftPwmVal = 200;
+        rightPwmVal = 200;
+        isAlert = false;
+      }
     }
     
     // Aplica a velocidade aos motores
     setMotors(leftPwmVal, rightPwmVal);
     
     // Prepara e envia o JSON de telemetria
-    StaticJsonDocument<200> doc;
+    StaticJsonDocument<256> doc;
     doc["timestamp"] = currentMillis;
-    
-    // Garante 1 casa decimal para bater com o mock
     doc["distance_cm"] = round(currentDistance * 10.0) / 10.0;
     
     switch (currentState) {
@@ -179,6 +243,7 @@ void loop() {
     doc["left_motor_pwm"] = leftPwmVal;
     doc["right_motor_pwm"] = rightPwmVal;
     doc["alert"] = isAlert;
+    doc["manual"] = isManualMode;
     
     String jsonString;
     serializeJson(doc, jsonString);

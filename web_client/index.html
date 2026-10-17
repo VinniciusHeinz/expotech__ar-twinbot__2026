@@ -21,6 +21,8 @@
         overflow: hidden;
         background-color: #0b0f19 !important;
         font-family: monospace;
+        user-select: none;
+        -webkit-user-select: none;
       }
 
       /* Painel HUD Semitransparente com Desfoque */
@@ -59,14 +61,14 @@
         word-break: break-word;
       }
 
-      /* Barra superior para alternar entre modos a qualquer momento */
-      #mode-switcher {
+      /* Barra superior para alternar entre modos e Admin */
+      #top-bar {
         position: fixed;
         top: 16px;
         right: 16px;
         z-index: 1000;
-        display: none;
-        gap: 8px;
+        display: flex;
+        gap: 6px;
         background: rgba(15, 23, 42, 0.78);
         backdrop-filter: blur(10px);
         -webkit-backdrop-filter: blur(10px);
@@ -75,11 +77,16 @@
         border: 1px solid rgba(255, 255, 255, 0.15);
       }
 
+      #mode-switcher {
+        display: none;
+        gap: 6px;
+      }
+
       .switch-btn {
         background: transparent;
         color: #94a3b8;
         border: none;
-        padding: 8px 12px;
+        padding: 8px 10px;
         border-radius: 6px;
         font-family: monospace;
         font-size: 12px;
@@ -92,6 +99,177 @@
         background: #00ffcc;
         color: #0f172a;
         box-shadow: 0 0 12px rgba(0, 255, 204, 0.4);
+      }
+
+      #btn-admin-login {
+        border: 1px solid rgba(255, 170, 0, 0.4);
+        color: #ffaa00;
+      }
+
+      #btn-admin-login.logged-in {
+        background: #ffaa00;
+        color: #0f172a;
+        box-shadow: 0 0 12px rgba(255, 170, 0, 0.4);
+      }
+
+      /* Modal de Login Admin */
+      #login-modal {
+        position: fixed;
+        inset: 0;
+        z-index: 10000;
+        background: rgba(0, 0, 0, 0.75);
+        backdrop-filter: blur(6px);
+        display: none;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .modal-box {
+        background: #0f172a;
+        border: 1px solid #00ffcc;
+        border-radius: 14px;
+        padding: 24px;
+        width: 85%;
+        max-width: 320px;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.7);
+        color: #f1f5f9;
+      }
+
+      .modal-box h4 {
+        margin: 0 0 16px 0;
+        color: #00ffcc;
+        font-size: 15px;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+      }
+
+      .modal-input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 10px 12px;
+        margin-bottom: 12px;
+        background: #1e293b;
+        border: 1px solid #334155;
+        border-radius: 8px;
+        color: #fff;
+        font-family: monospace;
+        font-size: 14px;
+      }
+
+      .modal-actions {
+        display: flex;
+        gap: 10px;
+        margin-top: 8px;
+      }
+
+      .modal-btn {
+        flex: 1;
+        padding: 10px;
+        border: none;
+        border-radius: 8px;
+        font-family: monospace;
+        font-weight: bold;
+        cursor: pointer;
+      }
+
+      #login-submit {
+        background: #00ffcc;
+        color: #0f172a;
+      }
+
+      #login-cancel {
+        background: #334155;
+        color: #f1f5f9;
+      }
+
+      #login-error {
+        color: #ff2244;
+        font-size: 12px;
+        margin-bottom: 10px;
+        display: none;
+      }
+
+      /* Painel de Controlo Admin (D-Pad) */
+      #admin-panel {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 2000;
+        background: rgba(15, 23, 42, 0.85);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 170, 0, 0.45);
+        border-radius: 16px;
+        padding: 14px;
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+      }
+
+      #toggle-drive-mode {
+        width: 100%;
+        padding: 8px 12px;
+        border-radius: 8px;
+        border: 1px solid #00ffcc;
+        background: rgba(0, 255, 204, 0.15);
+        color: #00ffcc;
+        font-family: monospace;
+        font-weight: bold;
+        font-size: 12px;
+        cursor: pointer;
+      }
+
+      #toggle-drive-mode.manual-active {
+        border-color: #ffaa00;
+        background: rgba(255, 170, 0, 0.2);
+        color: #ffaa00;
+      }
+
+      .dpad-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 52px);
+        grid-template-rows: repeat(3, 52px);
+        gap: 6px;
+        opacity: 0.4;
+        pointer-events: none;
+        transition: opacity 0.2s;
+      }
+
+      .dpad-grid.enabled {
+        opacity: 1;
+        pointer-events: auto;
+      }
+
+      .dpad-btn {
+        background: #1e293b;
+        border: 1px solid #475569;
+        border-radius: 10px;
+        color: #f8fafc;
+        font-size: 18px;
+        font-weight: bold;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        user-select: none;
+        -webkit-user-select: none;
+        touch-action: manipulation;
+      }
+
+      .dpad-btn:active, .dpad-btn.pressed {
+        background: #ffaa00;
+        color: #0f172a;
+        border-color: #ffaa00;
+        transform: scale(0.95);
+      }
+
+      .dpad-stop {
+        background: rgba(255, 34, 68, 0.2);
+        border-color: #ff2244;
+        color: #ff2244;
+        font-size: 12px;
       }
 
       /* Containers de visualização */
@@ -110,24 +288,20 @@
         background: radial-gradient(circle at center, #1e293b 0%, #090d16 100%);
       }
 
-      /* Dica de interação no modo 3D */
       #orbit-hint {
         position: fixed;
         bottom: 20px;
-        left: 50%;
-        transform: translateX(-50%);
+        left: 16px;
         z-index: 1000;
         color: rgba(241, 245, 249, 0.6);
         background: rgba(15, 23, 42, 0.6);
-        padding: 6px 14px;
+        padding: 6px 12px;
         border-radius: 20px;
-        font-size: 12px;
+        font-size: 11px;
         pointer-events: none;
         display: none;
-        white-space: nowrap;
       }
 
-      /* Força a tag de vídeo criada pelo MindAR a ocupar todo o ecrã e ficar no fundo */
       #ar-container video {
         position: absolute !important;
         top: 0 !important;
@@ -138,7 +312,6 @@
         z-index: 1 !important;
       }
 
-      /* Força a camada 3D do Three.js a ficar transparente e sobre o vídeo */
       #ar-container canvas {
         position: absolute !important;
         top: 0 !important;
@@ -202,10 +375,43 @@
       <div id="status">Conectando ao ESP32...</div>
     </div>
 
-    <!-- Alternador de Modo (aparece após iniciar) -->
-    <div id="mode-switcher">
-      <button id="btn-mode-ar" class="switch-btn">📷 AR</button>
-      <button id="btn-mode-orbit" class="switch-btn">🪐 3D LIVRE</button>
+    <!-- Barra Superior (Alternador + Botão Admin) -->
+    <div id="top-bar">
+      <div id="mode-switcher">
+        <button id="btn-mode-ar" class="switch-btn">📷 AR</button>
+        <button id="btn-mode-orbit" class="switch-btn">🪐 3D</button>
+      </div>
+      <button id="btn-admin-login" class="switch-btn">🔒 ADMIN</button>
+    </div>
+
+    <!-- Modal de Autenticação Admin -->
+    <div id="login-modal">
+      <div class="modal-box">
+        <h4>🔒 Acesso Admin</h4>
+        <div id="login-error">Utilizador ou senha incorretos!</div>
+        <input type="text" id="admin-user" class="modal-input" placeholder="Utilizador" autocomplete="off" />
+        <input type="password" id="admin-pass" class="modal-input" placeholder="Palavra-passe" />
+        <div class="modal-actions">
+          <button id="login-cancel" class="modal-btn">Cancelar</button>
+          <button id="login-submit" class="modal-btn">Entrar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Painel de Controlo Remoto (Visível após Login) -->
+    <div id="admin-panel">
+      <button id="toggle-drive-mode">🤖 MODO: AUTÓNOMO</button>
+      <div id="dpad-container" class="dpad-grid">
+        <div></div>
+        <button class="dpad-btn" data-dir="FORWARD">▲</button>
+        <div></div>
+        <button class="dpad-btn" data-dir="LEFT">◄</button>
+        <button class="dpad-btn dpad-stop" data-dir="STOP">STOP</button>
+        <button class="dpad-btn" data-dir="RIGHT">►</button>
+        <div></div>
+        <button class="dpad-btn" data-dir="REVERSE">▼</button>
+        <div></div>
+      </div>
     </div>
 
     <!-- Botões Iniciais -->
@@ -215,7 +421,7 @@
     </div>
 
     <!-- Dica de Rotação no Modo 3D -->
-    <div id="orbit-hint">Arraste para girar 360° • Pinça/Scroll para Zoom</div>
+    <div id="orbit-hint">Arraste: Girar 360° • Pinça/Scroll: Zoom</div>
 
     <!-- Containers -->
     <div id="ar-container"></div>
