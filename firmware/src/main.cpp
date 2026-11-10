@@ -4,10 +4,10 @@
 #include <ArduinoJson.h>
 
 // ---------------------------------------------------------
-// Configurações de Rede
+// Configurações de Rede (Hotspot do Notebook)
 // ---------------------------------------------------------
-const char* ssid = "Vinnicius :D";
-const char* password = "Vinnicius.ph02004";
+const char* ssid = "Projeto Twinbot 2026";
+const char* password = "Twinbot2026";
 
 WebSocketsServer webSocket = WebSocketsServer(81);
 
@@ -36,10 +36,10 @@ const int pwmChannelLeft = 0;
 const int pwmChannelRight = 1;
 
 // ---------------------------------------------------------
-// Variáveis de Estado (Máquina de Estados Finitos)
+// Variáveis de Estado (Inicia PARADO em Modo Manual)
 // ---------------------------------------------------------
 enum BotState { FORWARD, BRAKE, REVERSE, ROTATE };
-BotState currentState = FORWARD;
+BotState currentState = BRAKE;
 
 float currentDistance = 0.0;
 int leftPwmVal = 0;
@@ -47,8 +47,8 @@ int rightPwmVal = 0;
 bool isAlert = false;
 unsigned long lastTelemetryTime = 0;
 
-// Variáveis do Modo Manual (Admin)
-bool isManualMode = false;
+// Inicia em Modo Manual por segurança (não anda sozinho ao ligar)
+bool isManualMode = true;
 int manualLeftPwm = 0;
 int manualRightPwm = 0;
 BotState manualState = BRAKE;
@@ -90,9 +90,8 @@ float readDistance() {
   delayMicroseconds(10);
   digitalWrite(TRIG_PIN, LOW);
   
-  // Timeout de 30ms para não bloquear o loop se não houver retorno
   long duration = pulseIn(ECHO_PIN, HIGH, 30000); 
-  if (duration == 0) return 100.0; // Caminho livre assumido
+  if (duration == 0) return 100.0;
   
   return (duration * 0.0343) / 2.0;
 }
@@ -111,7 +110,6 @@ void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t leng
       if (cmd && strcmp(cmd, "mode") == 0) {
         isManualMode = cmdDoc["manual"];
         if (isManualMode) {
-          // Ao entrar no modo manual, trava o robô e aguarda comandos
           manualLeftPwm = 0;
           manualRightPwm = 0;
           manualState = BRAKE;
@@ -162,51 +160,56 @@ void setup() {
   pinMode(IN3, OUTPUT);
   pinMode(IN4, OUTPUT);
   
-  // Configuração do PWM
+  // Configuração do PWM e trava imediata dos motores no boot
   ledcSetup(pwmChannelLeft, freq, resolution);
   ledcAttachPin(ENA, pwmChannelLeft);
   ledcSetup(pwmChannelRight, freq, resolution);
   ledcAttachPin(ENB, pwmChannelRight);
+  setMotors(0, 0);
   
-  // Conexão Wi-Fi
+  // Conexão Wi-Fi otimizada para o Hotspot do Windows (2,4 GHz)
+  WiFi.mode(WIFI_STA);
+  WiFi.setSleep(false);         // Mantém o rádio ativo para não desconectar do Hotspot
+  WiFi.setAutoReconnect(true);  // Reconecta automaticamente se oscilar
   WiFi.begin(ssid, password);
-  Serial.print("Conectando ao Wi-Fi");
+
+  Serial.print("Conectando ao Hotspot: ");
+  Serial.print(ssid);
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
   }
   Serial.println("\nWi-Fi conectado!");
-  Serial.print("IP do ESP32: ");
+  Serial.print("IP do ESP32 no Hotspot: ");
   Serial.println(WiFi.localIP());
   
-  // Inicia WebSocket e regista o callback de comandos
+  // Inicia WebSocket
   webSocket.begin();
   webSocket.onEvent(onWebSocketEvent);
-  Serial.println("Servidor WebSocket iniciado na porta 81");
+  Serial.println("Servidor WebSocket iniciado na porta 81 (Modo Inicial: MANUAL/PARADO)");
 }
 
 // ---------------------------------------------------------
 // Loop Principal
 // ---------------------------------------------------------
 void loop() {
-  webSocket.loop(); // Mantém a comunicação WebSocket ativa
+  webSocket.loop();
   
   unsigned long currentMillis = millis();
   
-  // Executa a lógica e envia telemetria a ~15 Hz (a cada 66 ms)
   if (currentMillis - lastTelemetryTime >= 66) {
     lastTelemetryTime = currentMillis;
     
     currentDistance = readDistance();
     
     if (isManualMode) {
-      // Modo Manual (Controlado pelo Admin na Web)
+      // Modo Manual (Padrão ao ligar)
       currentState = manualState;
       leftPwmVal = manualLeftPwm;
       rightPwmVal = manualRightPwm;
       isAlert = (currentDistance < 30.0);
     } else {
-      // Modo Autónomo (Navegação Reativa Original)
+      // Modo Autónomo
       if (currentDistance <= 15.0) {
         currentState = REVERSE;
         leftPwmVal = -150;
@@ -225,10 +228,8 @@ void loop() {
       }
     }
     
-    // Aplica a velocidade aos motores
     setMotors(leftPwmVal, rightPwmVal);
     
-    // Prepara e envia o JSON de telemetria
     StaticJsonDocument<256> doc;
     doc["timestamp"] = currentMillis;
     doc["distance_cm"] = round(currentDistance * 10.0) / 10.0;
@@ -248,6 +249,6 @@ void loop() {
     String jsonString;
     serializeJson(doc, jsonString);
     
-    webSocket.broadcastTXT(jsonString); // Dispara para o Web Client
+    webSocket.broadcastTXT(jsonString);
   }
 }

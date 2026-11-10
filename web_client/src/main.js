@@ -24,34 +24,79 @@ const toggleDriveModeBtn = document.getElementById('toggle-drive-mode');
 const dpadContainer = document.getElementById('dpad-container');
 const dpadButtons = document.querySelectorAll('.dpad-btn');
 
+// Cria automaticamente o seletor de IP dentro do Painel Admin se não existir no index.html
+let espIpInput = document.getElementById('esp-ip-input');
+let espIpConnectBtn = document.getElementById('esp-ip-connect-btn');
+
+if (!espIpInput && adminPanel) {
+  const ipBox = document.createElement('div');
+  ipBox.style.cssText = 'width:100%;display:flex;flex-direction:column;gap:4px;border-bottom:1px solid rgba(255,255,255,0.15);padding-bottom:8px;margin-bottom:4px;';
+  ipBox.innerHTML = `
+    <label style="font-size:10px;color:#94a3b8;">IP DA ESP32:</label>
+    <div style="display:flex;gap:4px;width:100%;">
+      <input type="text" id="esp-ip-input" placeholder="192.168.137.x" autocomplete="off" style="flex:1;min-width:0;width:110px;background:#1e293b;border:1px solid #475569;border-radius:6px;color:#f8fafc;font-family:monospace;font-size:11px;padding:6px;" />
+      <button id="esp-ip-connect-btn" style="background:#00ffcc;color:#0f172a;border:none;border-radius:6px;padding:6px 8px;font-family:monospace;font-size:11px;font-weight:bold;cursor:pointer;">OK</button>
+    </div>
+  `;
+  adminPanel.insertBefore(ipBox, adminPanel.firstChild);
+  espIpInput = document.getElementById('esp-ip-input');
+  espIpConnectBtn = document.getElementById('esp-ip-connect-btn');
+}
+
 // Credenciais de Acesso Admin
 const ADMIN_USER = 'admin';
 const ADMIN_PASS = 'twinbot2026';
 
 let isAdminLoggedIn = false;
-let isManualControl = false;
+let isManualControl = true; // Inicia em Modo Manual por segurança
 let wsSocket = null;
 
-// ============================================================================
-// 1. CONEXÃO WEBSOCKET INTACTA (Via Proxy Seguro do Vite)
-// ============================================================================
-const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-const WS_URL = `${protocol}//${window.location.host}/api/ws`;
+// Usa o IP atual do Hotspot como padrão
+let currentEspIp = localStorage.getItem('twinbot_esp_ip') || '192.168.137.162';
+if (espIpInput) {
+  espIpInput.value = currentEspIp;
+}
 
+// ============================================================================
+// 1. CONEXÃO WEBSOCKET COM IP DINÂMICO (Via Proxy Seguro do Vite)
+// ============================================================================
 const activeCones = [];
 let lastTelemetry = null;
 
-function connectWebSocket() {
-  if (statusEl) {
-    statusEl.innerHTML = "Conectando ao ESP32 via Telemetria...";
+async function connectWebSocket(targetIp = currentEspIp) {
+  currentEspIp = targetIp.trim();
+  localStorage.setItem('twinbot_esp_ip', currentEspIp);
+
+  if (espIpInput && espIpInput.value !== currentEspIp) {
+    espIpInput.value = currentEspIp;
   }
+
+  if (wsSocket) {
+    wsSocket.onclose = null;
+    wsSocket.onerror = null;
+    wsSocket.close();
+  }
+
+  if (statusEl) {
+    statusEl.innerHTML = `Conectando ao ESP32 (${currentEspIp})...`;
+  }
+
+  // Avisa o servidor Vite qual é o novo IP antes de abrir o WebSocket
+  try {
+    await fetch(`/api/set-ip?ip=${encodeURIComponent(currentEspIp)}`);
+  } catch (e) {
+    console.warn("Não foi possível atualizar rota de IP:", e);
+  }
+
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const WS_URL = `${protocol}//${window.location.host}/api/ws`;
 
   wsSocket = new WebSocket(WS_URL);
 
   wsSocket.onopen = () => {
-    console.log("Conectado ao ESP32 via WebSocket!");
+    console.log(`Conectado ao ESP32 (${currentEspIp}) via WebSocket!`);
     if (statusEl) {
-      statusEl.innerHTML = "ESP32 Conectado. Aguardando dados...";
+      statusEl.innerHTML = `ESP32 Conectado (${currentEspIp}). Aguardando dados...`;
     }
   };
 
@@ -65,10 +110,9 @@ function connectWebSocket() {
     }
   };
 
-  wsSocket.onerror = (err) => {
-    console.error("Erro no WebSocket:", err);
+  wsSocket.onerror = () => {
     if (statusEl) {
-      statusEl.innerHTML = "<span style='color: #ff2244;'>Erro na conexão WebSocket</span>";
+      statusEl.innerHTML = `<span style='color: #ff2244;'>Sem resposta em ${currentEspIp}</span><br><small>Troque o IP no botão ADMIN</small>`;
     }
   };
 
@@ -77,12 +121,27 @@ function connectWebSocket() {
   };
 }
 
-connectWebSocket();
-
 function sendCommand(payload) {
   if (wsSocket && wsSocket.readyState === WebSocket.OPEN) {
     wsSocket.send(JSON.stringify(payload));
   }
+}
+
+function handleIpChange() {
+  if (!espIpInput) return;
+  const newIp = espIpInput.value.trim();
+  if (newIp) {
+    connectWebSocket(newIp);
+  }
+}
+
+if (espIpConnectBtn) {
+  espIpConnectBtn.addEventListener('click', handleIpChange);
+}
+if (espIpInput) {
+  espIpInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') handleIpChange();
+  });
 }
 
 // ============================================================================
@@ -101,10 +160,16 @@ function updateDigitalTwin(data) {
     wireMat.color.setHex(dynamicColor);
   });
 
+  if (typeof data.manual === 'boolean' && data.manual !== isManualControl) {
+    isManualControl = data.manual;
+    syncDriveModeUI();
+  }
+
   const controlTag = data.manual ? '<span style="color:#ffaa00">MANUAL</span>' : '<span style="color:#00ffcc">AUTÓNOMO</span>';
 
   if (statusEl) {
     statusEl.innerHTML = `
+      <b>IP:</b> ${currentEspIp}<br>
       <b>MODO:</b> ${controlTag}<br>
       <b>ESTADO:</b> <span style="color: #${dynamicColor.toString(16).padStart(6, '0')}">${data.state}</span><br>
       <b>DISTÂNCIA:</b> ${data.distance_cm} cm<br>
@@ -114,25 +179,43 @@ function updateDigitalTwin(data) {
   }
 }
 
+function syncDriveModeUI() {
+  if (!toggleDriveModeBtn || !dpadContainer) return;
+  if (isManualControl) {
+    toggleDriveModeBtn.innerText = '🕹️ MODO: MANUAL';
+    toggleDriveModeBtn.classList.add('manual-active');
+    dpadContainer.classList.add('enabled');
+  } else {
+    toggleDriveModeBtn.innerText = '🤖 MODO: AUTÓNOMO';
+    toggleDriveModeBtn.classList.remove('manual-active');
+    dpadContainer.classList.remove('enabled');
+  }
+}
+
+syncDriveModeUI();
+
 // ============================================================================
 // 3. AUTENTICAÇÃO ADMIN E CONTROLO REMOTO
 // ============================================================================
-btnAdminLogin.addEventListener('click', () => {
-  if (isAdminLoggedIn) {
-    // Se já estiver logado, alterna a exibição do painel
-    adminPanel.style.display = adminPanel.style.display === 'none' ? 'flex' : 'none';
-  } else {
-    loginError.style.display = 'none';
-    adminUser.value = '';
-    adminPass.value = '';
-    loginModal.style.display = 'flex';
-    adminUser.focus();
-  }
-});
+if (btnAdminLogin) {
+  btnAdminLogin.addEventListener('click', () => {
+    if (isAdminLoggedIn) {
+      adminPanel.style.display = adminPanel.style.display === 'none' ? 'flex' : 'none';
+    } else {
+      loginError.style.display = 'none';
+      adminUser.value = '';
+      adminPass.value = '';
+      loginModal.style.display = 'flex';
+      adminUser.focus();
+    }
+  });
+}
 
-loginCancel.addEventListener('click', () => {
-  loginModal.style.display = 'none';
-});
+if (loginCancel) {
+  loginCancel.addEventListener('click', () => {
+    loginModal.style.display = 'none';
+  });
+}
 
 function handleLogin() {
   const u = adminUser.value.trim();
@@ -144,34 +227,27 @@ function handleLogin() {
     btnAdminLogin.innerText = '🔓 ADMIN';
     btnAdminLogin.classList.add('logged-in');
     adminPanel.style.display = 'flex';
+    syncDriveModeUI();
   } else {
     loginError.style.display = 'block';
   }
 }
 
-loginSubmit.addEventListener('click', handleLogin);
-adminPass.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') handleLogin();
-});
+if (loginSubmit) loginSubmit.addEventListener('click', handleLogin);
+if (adminPass) {
+  adminPass.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') handleLogin();
+  });
+}
 
-// Alternar entre Modo Autónomo e Modo Manual
-toggleDriveModeBtn.addEventListener('click', () => {
-  isManualControl = !isManualControl;
+if (toggleDriveModeBtn) {
+  toggleDriveModeBtn.addEventListener('click', () => {
+    isManualControl = !isManualControl;
+    syncDriveModeUI();
+    sendCommand({ cmd: 'mode', manual: isManualControl });
+  });
+}
 
-  if (isManualControl) {
-    toggleDriveModeBtn.innerText = '🕹️ MODO: MANUAL';
-    toggleDriveModeBtn.classList.add('manual-active');
-    dpadContainer.classList.add('enabled');
-  } else {
-    toggleDriveModeBtn.innerText = '🤖 MODO: AUTÓNOMO';
-    toggleDriveModeBtn.classList.remove('manual-active');
-    dpadContainer.classList.remove('enabled');
-  }
-
-  sendCommand({ cmd: 'mode', manual: isManualControl });
-});
-
-// Eventos dos botões direcionais (Touch e Rato)
 dpadButtons.forEach((btn) => {
   const dir = btn.getAttribute('data-dir');
 
@@ -200,10 +276,11 @@ dpadButtons.forEach((btn) => {
   btn.addEventListener('touchcancel', stopMove, { passive: false });
 });
 
-// Suporte a Teclado no PC (Setas ou WASD)
 const activeKeys = new Set();
 window.addEventListener('keydown', (e) => {
   if (!isAdminLoggedIn || !isManualControl || loginModal.style.display === 'flex') return;
+  if (document.activeElement === espIpInput) return;
+
   const key = e.key.toLowerCase();
   if (activeKeys.has(key)) return;
 
@@ -222,6 +299,8 @@ window.addEventListener('keydown', (e) => {
 
 window.addEventListener('keyup', (e) => {
   if (!isAdminLoggedIn || !isManualControl) return;
+  if (document.activeElement === espIpInput) return;
+
   const key = e.key.toLowerCase();
   if (activeKeys.has(key)) {
     activeKeys.delete(key);
@@ -236,7 +315,6 @@ function createRobotModel() {
   const THREE = window.THREE;
   const robotGroup = new THREE.Group();
 
-  // --- Materiais ---
   const metalMat = new THREE.MeshStandardMaterial({ color: 0xd1d5db, metalness: 0.85, roughness: 0.2 });
   const brassMat = new THREE.MeshStandardMaterial({ color: 0xd97706, metalness: 0.8, roughness: 0.25 });
   const darkMetalMat = new THREE.MeshStandardMaterial({ color: 0x1f2937, metalness: 0.7, roughness: 0.3 });
@@ -252,7 +330,6 @@ function createRobotModel() {
   const espBlack = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.5, metalness: 0.3 });
   const whiteWheelMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.25 });
 
-  // Acrílico fosco translúcido (visível em qualquer fundo escuro ou câmera AR)
   const acrylicMat = new THREE.MeshStandardMaterial({
     color: 0xe2e8f0,
     transparent: true,
@@ -267,24 +344,21 @@ function createRobotModel() {
     opacity: 0.65
   });
 
-  // ==========================================================================
-  // 4.1 CHASSI DE ACRÍLICO (Contorno fiel ao chassi real + bordas visíveis)
-  // ==========================================================================
   const chassisShape = new THREE.Shape();
   chassisShape.moveTo(-0.68, 1.35);
-  chassisShape.lineTo(0.68, 1.35);    // Ponta frontal onde fica o sensor
-  chassisShape.lineTo(0.88, 1.15);    // Chanfro frontal direito
-  chassisShape.lineTo(0.88, 0.05);    // Lateral dianteira direita
-  chassisShape.lineTo(0.66, 0.05);    // Recorte estreito para a roda
+  chassisShape.lineTo(0.68, 1.35);
+  chassisShape.lineTo(0.88, 1.15);
+  chassisShape.lineTo(0.88, 0.05);
+  chassisShape.lineTo(0.66, 0.05);
   chassisShape.lineTo(0.66, -0.95);
-  chassisShape.lineTo(1.08, -0.95);   // Aba traseira direita
+  chassisShape.lineTo(1.08, -0.95);
   chassisShape.lineTo(1.08, -1.25);
-  chassisShape.quadraticCurveTo(0, -1.72, -1.08, -1.25); // Para-choque curvo traseiro
-  chassisShape.lineTo(-1.08, -0.95);  // Aba traseira esquerda
-  chassisShape.lineTo(-0.66, -0.95);  // Recorte estreito para a roda
+  chassisShape.quadraticCurveTo(0, -1.72, -1.08, -1.25);
+  chassisShape.lineTo(-1.08, -0.95);
+  chassisShape.lineTo(-0.66, -0.95);
   chassisShape.lineTo(-0.66, 0.05);
   chassisShape.lineTo(-0.88, 0.05);
-  chassisShape.lineTo(-0.88, 1.15);   // Chanfro frontal esquerdo
+  chassisShape.lineTo(-0.88, 1.15);
   chassisShape.closePath();
 
   const chassisGeo = new THREE.ExtrudeGeometry(chassisShape, { depth: 0.06, bevelEnabled: false });
@@ -294,11 +368,9 @@ function createRobotModel() {
   chassisMesh.position.y = 0.48;
   robotGroup.add(chassisMesh);
 
-  // Destaque das bordas do acrílico para dar efeito de vidro/acrílico cortado a laser
   const chassisEdges = new THREE.LineSegments(new THREE.EdgesGeometry(chassisGeo), acrylicEdgeMat);
   chassisMesh.add(chassisEdges);
 
-  // Detalhes das furações no acrílico e parafusos metálicos
   const slotMat = new THREE.MeshBasicMaterial({ color: 0x0b0f19 });
   [-0.55, 0.55].forEach(x => {
     for (let z = 0.35; z <= 0.75; z += 0.2) {
@@ -314,19 +386,14 @@ function createRobotModel() {
     robotGroup.add(screw);
   });
 
-  // ==========================================================================
-  // 4.2 RODAS TRASEIRAS COM 5 RAIOS AMARELOS E PNEUS TRATORADOS + MOTORES DC
-  // ==========================================================================
   [-0.95, 0.95].forEach(xPos => {
     const wheelGroup = new THREE.Group();
     wheelGroup.position.set(xPos, 0.52, -0.45);
 
-    // Pneu de borracha
     const tire = new THREE.Mesh(new THREE.CylinderGeometry(0.52, 0.52, 0.36, 32), rubberMat);
     tire.rotation.z = Math.PI / 2;
     wheelGroup.add(tire);
 
-    // Gomos / Sulcos do pneu
     for (let i = 0; i < 18; i++) {
       const angle = (i / 18) * Math.PI * 2;
       const tread = new THREE.Mesh(new THREE.BoxGeometry(0.37, 0.035, 0.06), treadMat);
@@ -335,30 +402,22 @@ function createRobotModel() {
       wheelGroup.add(tread);
     }
 
-    // Aro amarelo externo (anel)
     const rimOuter = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.38, 0.37, 24, 1, true), yellowRimMat);
     rimOuter.rotation.z = Math.PI / 2;
     wheelGroup.add(rimOuter);
 
-    // Fundo escuro interno da roda para destacar os 5 raios
     const rimBack = new THREE.Mesh(new THREE.CylinderGeometry(0.37, 0.37, 0.28, 24), rubberMat);
     rimBack.rotation.z = Math.PI / 2;
     wheelGroup.add(rimBack);
 
-    // Cubo central amarelo
     const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.38, 16), yellowRimMat);
     hub.rotation.z = Math.PI / 2;
     wheelGroup.add(hub);
 
-    // Os 5 raios amarelos da calota
     for (let i = 0; i < 5; i++) {
       const spokeAngle = (i / 5) * Math.PI * 2;
       const spoke = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.085, 0.36), yellowRimMat);
-      spoke.position.set(
-        0,
-        Math.cos(spokeAngle) * 0.18,
-        Math.sin(spokeAngle) * 0.18
-      );
+      spoke.position.set(0, Math.cos(spokeAngle) * 0.18, Math.sin(spokeAngle) * 0.18);
       spoke.rotation.x = spokeAngle;
       wheelGroup.add(spoke);
     }
@@ -366,27 +425,21 @@ function createRobotModel() {
     robotGroup.add(wheelGroup);
   });
 
-  // Motores amarelos TT (Caixa de redução embaixo do chassi)
   [-0.58, 0.58].forEach(xPos => {
     const motorBox = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.28, 0.78), yellowMotorMat);
     motorBox.position.set(xPos, 0.30, -0.45);
     robotGroup.add(motorBox);
   });
 
-  // ==========================================================================
-  // 4.3 RODA BOBA FRONTAL (CASTER) COM ESPAÇADORES DOURADOS
-  // ==========================================================================
   const casterGroup = new THREE.Group();
   casterGroup.position.set(0, 0.42, 1.05);
 
-  // 4 Espaçadores de latão dourado
   [[-0.14, -0.1], [0.14, -0.1], [-0.14, 0.1], [0.14, 0.1]].forEach(([bx, bz]) => {
     const standoff = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.12, 8), brassMat);
     standoff.position.set(bx, -0.06, bz);
     casterGroup.add(standoff);
   });
 
-  // Base e garfo metálico giratório
   const casterPlate = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.03, 0.3), metalMat);
   casterPlate.position.y = -0.12;
   casterGroup.add(casterPlate);
@@ -395,7 +448,6 @@ function createRobotModel() {
   casterFork.position.set(0, -0.21, -0.03);
   casterGroup.add(casterFork);
 
-  // Rodinha branca de nylon
   const casterWheel = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.12, 24), whiteWheelMat);
   casterWheel.rotation.z = Math.PI / 2;
   casterWheel.position.set(0, -0.26, -0.05);
@@ -403,18 +455,13 @@ function createRobotModel() {
 
   robotGroup.add(casterGroup);
 
-  // ==========================================================================
-  // 4.4 SUPORTE VERTICAL AZUL/MDF E SENSOR ULTRASSÔNICO HC-SR04 NA PONTA
-  // ==========================================================================
   const mountGroup = new THREE.Group();
   mountGroup.position.set(0, 0.48, 1.15);
 
-  // Base em L (MDF com frente azul)
   const baseFoot = new THREE.Mesh(new THREE.BoxGeometry(0.50, 0.04, 0.34), mdfMat);
   baseFoot.position.set(0, 0.02, -0.05);
   mountGroup.add(baseFoot);
 
-  // Aderência vermelha/cola na base do suporte (igual à foto)
   const redPad = new THREE.Mesh(
     new THREE.CylinderGeometry(0.14, 0.14, 0.05, 16),
     new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.6 })
@@ -422,7 +469,6 @@ function createRobotModel() {
   redPad.position.set(0, 0.025, -0.05);
   mountGroup.add(redPad);
 
-  // Haste inferior do suporte (pescoço azul com 2 furos verticais)
   const neckMdf = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.52, 0.04), mdfMat);
   neckMdf.position.set(0, 0.26, 0.10);
   mountGroup.add(neckMdf);
@@ -431,14 +477,12 @@ function createRobotModel() {
   neckBlue.position.set(0, 0.26, 0.125);
   mountGroup.add(neckBlue);
 
-  // Os 2 recortes verticais no pescoço do suporte azul
   [-0.08, 0.08].forEach(slotX => {
     const vSlot = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.20, 0.08), slotMat);
     vSlot.position.set(slotX, 0.32, 0.11);
     mountGroup.add(vSlot);
   });
 
-  // Cabeça octogonal azul onde encaixa o HC-SR04
   const headMdf = new THREE.Mesh(new THREE.BoxGeometry(1.02, 0.50, 0.04), mdfMat);
   headMdf.position.set(0, 0.68, 0.10);
   mountGroup.add(headMdf);
@@ -447,17 +491,14 @@ function createRobotModel() {
   headBlue.position.set(0, 0.68, 0.125);
   mountGroup.add(headBlue);
 
-  // Placa PCB do HC-SR04 (vista na traseira/interior do suporte)
   const hcPcb = new THREE.Mesh(new THREE.BoxGeometry(0.90, 0.40, 0.03), pcbBlue);
   hcPcb.position.set(0, 0.68, 0.08);
   mountGroup.add(hcPcb);
 
-  // Conector preto de 4 pinos do sensor saindo por baixo
   const sensorHeader = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.12, 0.08), espBlack);
   sensorHeader.position.set(0, 0.45, 0.06);
   mountGroup.add(sensorHeader);
 
-  // Os 2 Cilindros Metálicos (Olhos do Sensor HC-SR04 apontados para +Z)
   const barrelGeo = new THREE.CylinderGeometry(0.16, 0.16, 0.24, 24);
   const meshCapGeo = new THREE.CircleGeometry(0.14, 20);
   const meshCapMat = new THREE.MeshBasicMaterial({ color: 0x111827 });
@@ -477,10 +518,6 @@ function createRobotModel() {
 
   robotGroup.add(mountGroup);
 
-  // ==========================================================================
-  // 4.5 MÓDULO ESP32 (Placa Preta Central) + PONTE H L298N (Vermelha Traseira)
-  // ==========================================================================
-  // ESP32 no centro-frente
   const espGroup = new THREE.Group();
   espGroup.position.set(-0.08, 0.52, 0.12);
 
@@ -491,19 +528,16 @@ function createRobotModel() {
   espModule.position.y = 0.07;
   espGroup.add(espModule);
 
-  // Chip prateado Wi-Fi do ESP32
   const espChip = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.02, 0.30), metalMat);
   espChip.position.set(0, 0.115, 0.18);
   espGroup.add(espChip);
 
-  // Fileiras de pinos nas laterais do ESP32
   [-0.22, 0.22].forEach(px => {
     const pinRow = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.10, 0.85), brassMat);
     pinRow.position.set(px, 0.06, 0);
     espGroup.add(pinRow);
   });
 
-  // LED vermelho aceso no ESP32
   const espLed = new THREE.Mesh(
     new THREE.BoxGeometry(0.04, 0.03, 0.04),
     new THREE.MeshBasicMaterial({ color: 0xff2244 })
@@ -513,26 +547,22 @@ function createRobotModel() {
 
   robotGroup.add(espGroup);
 
-  // Ponte H L298N (Atrás do ESP32)
   const l298Group = new THREE.Group();
   l298Group.position.set(0.08, 0.51, -0.68);
 
   const l298Pcb = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.05, 0.78), pcbRed);
   l298Group.add(l298Pcb);
 
-  // Dissipador de calor preto alto com aletas
   const heatsink = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.38, 0.34), darkMetalMat);
   heatsink.position.set(-0.05, 0.21, 0);
   l298Group.add(heatsink);
 
-  // 2 Capacitores eletrolíticos cilíndricos prateados
   [-0.12, 0.12].forEach(cx => {
     const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.065, 0.18, 12), metalMat);
     cap.position.set(cx, 0.11, -0.22);
     l298Group.add(cap);
   });
 
-  // Bornes azuis da L298N (Laterais e Traseiro)
   const termSideL = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.18, 0.26), terminalBlue);
   termSideL.position.set(-0.30, 0.11, 0.05);
   const termSideR = termSideL.clone();
@@ -543,12 +573,8 @@ function createRobotModel() {
 
   robotGroup.add(l298Group);
 
-  // ==========================================================================
-  // 4.6 CHICOTE DE CABOS COLORIDOS (Fiel à passagem lateral e traseira da foto)
-  // ==========================================================================
   const wireColors = [0xef4444, 0x22c55e, 0xeab308, 0x3b82f6, 0xa855f7, 0xf97316];
 
-  // Cabos que saem do sensor na frente, passam pela borda esquerda do chassi e sobem pro ESP32
   [0xef4444, 0xeab308, 0x22c55e, 0x78350f].forEach((c, idx) => {
     const offset = idx * 0.025;
     const sensorWireCurve = new THREE.CatmullRomCurve3([
@@ -561,7 +587,6 @@ function createRobotModel() {
     robotGroup.add(new THREE.Mesh(wGeo, new THREE.MeshBasicMaterial({ color: c })));
   });
 
-  // Arco de jumpers entre o ESP32, a L298N e a borda direita do chassi
   for (let i = 0; i < 6; i++) {
     const o = i * 0.03;
     const mainHarnessCurve = new THREE.CatmullRomCurve3([
@@ -574,15 +599,9 @@ function createRobotModel() {
     robotGroup.add(new THREE.Mesh(wGeo, new THREE.MeshBasicMaterial({ color: wireColors[i % wireColors.length] })));
   }
 
-  // ==========================================================================
-  // 5. CONE ULTRASSÔNICO DINÂMICO (CORRIGIDO: PROJETANDO PARA A FRENTE +Z)
-  // ==========================================================================
   const coneRadius = 0.32;
-  const coneGeo = new THREE.ConeGeometry(coneRadius, 1, 32, 1, true);
-  // Desloca o vértice (ponta) do cone para a origem (0, 0, 0)
-  coneGeo.translate(0, -0.5, 0);
-  // Rotaciona -90 graus em X para que a base do cone aponte para +Z (FRENTE DO ROBÔ)
-  coneGeo.rotateX(-Math.PI / 2);
+  const rawConeGeo = new THREE.ConeGeometry(coneRadius, 1, 32, 1, true);
+  rawConeGeo.translate(0, -0.5, 0);
 
   const coneMat = new THREE.MeshBasicMaterial({
     color: 0x00ffcc,
@@ -591,21 +610,15 @@ function createRobotModel() {
     side: THREE.DoubleSide
   });
 
-  // GRUPO PIVÔ: Ao escalar no updateDigitalTwin(x, y, z), o Three.js escala no eixo Y local.
-  // Rotacionando o sensorCone em -Math.PI/2, o eixo Y local passa a apontar para +Z (para frente)!
-  const rawConeGeo = new THREE.ConeGeometry(coneRadius, 1, 32, 1, true);
-  rawConeGeo.translate(0, -0.5, 0);
-
   const sensorCone = new THREE.Mesh(rawConeGeo, coneMat);
-  sensorCone.rotation.x = -Math.PI / 2; // <-- NEGATIVO faz o cone crescer para a FRENTE (+Z)!
-  sensorCone.position.set(0, 1.16, 1.48); // Exatamente na frente dos cilindros do HC-SR04
+  sensorCone.rotation.x = -Math.PI / 2;
+  sensorCone.position.set(0, 1.16, 1.48);
   robotGroup.add(sensorCone);
 
   const wireMat = new THREE.MeshBasicMaterial({ color: 0x00ffcc, wireframe: true });
   const sensorConeWire = new THREE.Mesh(rawConeGeo, wireMat);
   sensorCone.add(sensorConeWire);
 
-  // Registra o cone para receber atualizações em tempo real do WebSocket
   activeCones.push({ sensorCone, coneMat, wireMat });
 
   if (lastTelemetry) {
@@ -741,10 +754,12 @@ function startOrbitMode() {
 }
 
 // ============================================================================
-// 7. EVENTOS DOS BOTÕES DE VISUALIZAÇÃO
+// 7. EVENTOS DOS BOTÕES DE VISUALIZAÇÃO E INÍCIO DO WEBSOCKET
 // ============================================================================
-startArBtn.addEventListener('click', startARMode);
-startOrbitBtn.addEventListener('click', startOrbitMode);
+if (startArBtn) startArBtn.addEventListener('click', startARMode);
+if (startOrbitBtn) startOrbitBtn.addEventListener('click', startOrbitMode);
 
-btnModeAr.addEventListener('click', startARMode);
-btnModeOrbit.addEventListener('click', startOrbitMode);
+if (btnModeAr) btnModeAr.addEventListener('click', startARMode);
+if (btnModeOrbit) btnModeOrbit.addEventListener('click', startOrbitMode);
+
+connectWebSocket(currentEspIp);
